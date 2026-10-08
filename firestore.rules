@@ -1,0 +1,38 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /classes/{classId}/nodes/{nodeId} {
+      // 같은 반 마인드맵은 로그인된 학생 모두 볼 수 있음
+      allow read: if request.auth != null;
+
+      // 새 노드는 현재 익명 로그인 사용자의 소유로만 생성 가능
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly([
+          'type', 'text', 'parentId', 'createdAt', 'updatedAt', 'ownerUid'
+        ])
+        && request.resource.data.type in ['group', 'info', 'protect']
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 120
+        && request.resource.data.parentId is string
+        && request.resource.data.ownerUid == request.auth.uid;
+
+      // 자신이 만든 노드만 수정 가능
+      // text와 updatedAt 이외의 구조/소유자 정보는 변경할 수 없음
+      allow update: if request.auth != null
+        && resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['text', 'updatedAt'])
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 120;
+
+      // 자신이 만든 노드만 삭제 가능
+      allow delete: if request.auth != null
+        && resource.data.ownerUid == request.auth.uid;
+    }
+  }
+}
